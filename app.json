@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "nasa-salo",
-    "slug": "nasa-salo",
+    "name": "nasa-client",
+    "slug": "nasa-client",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
