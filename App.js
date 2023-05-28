@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Text, View, FlatList, Image, Button, TouchableOpacity, StyleSheet  } from 'react-native';
+import { Text, View, FlatList, Image, Button, TouchableOpacity, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import axios from 'axios';
+import { decode as atob, encode as btoa } from 'base-64';
 
 const API_KEY = '4O7kxB74PxdUdOoK17f0pcqLZn4kJAmUDJrWYgbt';
 
@@ -29,7 +30,7 @@ function ApodScreen() {
       {apodData?.media_type === 'image' ? (
         <Image source={{ uri: apodData?.url }} style={{ width: 415, height: 400 }} />
       ) : (
-        <Text style={{ margin: 10 }}>Пошёл нахуй!</Text>
+        <Text style={{ margin: 10 }}>Sorry, video format is not supported yet.</Text>
       )}
       <Text style={{ margin: 10 }}>{apodData?.title}</Text>
       <Text style={{ margin: 10 }}>{apodData?.explanation}</Text>
@@ -37,74 +38,109 @@ function ApodScreen() {
   );
 }
 
-  function AsteroidsScreen() {
-    const [asteroidsData, setAsteroidsData] = useState(null);
-  
-    useEffect(() => {
-      axios
-        .get(`https://api.nasa.gov/neo/rest/v1/feed?start_date=2015-09-07&end_date=2015-09-08&api_key=${API_KEY}&count=100`)
-        .then(response => setAsteroidsData(response.data.near_earth_objects))
-        .catch(error => console.log(error));
-    }, []);
-  
-    const renderAsteroidItem = ({ item }) => {
-      return (
-        <View>
-          <Text>Name: {item.name}</Text>
-          <Text>Distance: {item.close_approach_data[0].miss_distance.kilometers} km</Text>
-          <Image source={{ uri: item.nasa_jpl_url }} style={{ width: 200, height: 200 }} />
-        </View>
-      );
-    };
-  
-    return (
-      <View style={{ flex: 1 }}>
-        {asteroidsData && Object.values(asteroidsData) ? (
-          <FlatList
-            data={Object.values(asteroidsData)}
-            keyExtractor={item => item[0].id}
-            renderItem={renderAsteroidItem}
-          />
-        ) : (
-          <Text>Loading asteroids data...</Text>
-        )}
-      </View>
-    );
-  }
-
-function EarthScreen() {
-  const [earthData, setEarthData] = useState(null);
+function AsteroidsScreen() {
+  const [asteroidsData, setAsteroidsData] = useState(null);
 
   useEffect(() => {
     axios
-      .get(`https://api.nasa.gov/EPIC/api/earth/images?api_key=${API_KEY}`)
-      .then(response => setEarthData(response.data))
+      .get(`https://api.nasa.gov/neo/rest/v1/feed?start_date=2015-09-07&end_date=2015-09-08&api_key=${API_KEY}&count=100`)
+      .then(response => setAsteroidsData(response.data.near_earth_objects))
       .catch(error => console.log(error));
   }, []);
 
+  const renderAsteroidItem = ({ item }) => {
+    const asteroidId = item[0].id;
+    const nasaJplUrl = item[0].nasa_jpl_url;
+
+    const getAsteroidImageUrl = () => {
+      const searchUrl = `https://images-api.nasa.gov/search?q=${asteroidId}`;
+      return axios.get(searchUrl)
+        .then(response => {
+          const items = response.data.collection.items;
+          if (items.length > 0 && items[0].links && items[0].links.length > 0) {
+            return items[0].links[0].href;
+          }
+          return null;
+        })
+        .catch(error => {
+          console.log(error);
+          return null;
+        });
+    };
+
+    return (
+      <View>
+        <Text>Name: {item[0].name}</Text>
+        <Text>Distance: {item[0].close_approach_data[0].miss_distance.kilometers} km</Text>
+        {nasaJplUrl && (
+          <Image source={{ uri: nasaJplUrl }} style={{ width: 200, height: 200 }} />
+        )}
+        {!nasaJplUrl && (
+          <View>
+            <Text>Loading asteroid image...</Text>
+            {getAsteroidImageUrl().then(imageUrl => {
+              if (imageUrl) {
+                return (
+                  <Image source={{ uri: imageUrl }} style={{ width: 200, height: 200 }} />
+                );
+              }
+              return <Text>No image available</Text>;
+            })}
+          </View>
+        )}
+      </View>
+    );
+  };
+
   return (
     <View style={{ flex: 1 }}>
-      {earthData ? (
+      {asteroidsData && Object.values(asteroidsData) ? (
         <FlatList
-          data={earthData}
-          keyExtractor={item => item.identifier.toString()}
-          renderItem={({ item }) => (
-            <View>
-              <Image
-                source={{ uri: `https://api.nasa.gov/EPIC/archive/natural/${item.image}.png?api_key=${API_KEY}` }}
-                style={{ width: 415, height: 400 }}
-              />
-              <Text>Date: {item.date}</Text>
-              <Text>Caption: {item.caption}</Text>
-            </View>
-          )}
+          data={Object.values(asteroidsData)}
+          keyExtractor={item => item[0].id}
+          renderItem={renderAsteroidItem}
         />
       ) : (
-        <Text>Loading Earth data...</Text>
+        <Text>Loading asteroids data...</Text>
       )}
     </View>
   );
 }
+
+const EarthScreen = () => {
+  const [earthImageUrl, setEarthImageUrl] = useState(null);
+  const [date, setDate] = useState(null);
+
+  useEffect(() => {
+    fetchEarthImage();
+  }, []);
+
+  const fetchEarthImage = () => {
+    const apiUrl = `https://api.nasa.gov/planetary/earth/assets?lon=-95.33&lat=29.78&date=2018-01-01&&dim=0.10&api_key=${API_KEY}`;
+    axios
+      .get(apiUrl)
+      .then(response => {
+        const { date, url } = response.data;
+        setEarthImageUrl(url);
+        setDate(date);
+      })
+      .catch(error => console.log(error));
+  };
+
+  return (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+      {earthImageUrl ? (
+        <>
+          <Image source={{ uri: earthImageUrl }} style={{ width: 415, height: 400 }} />
+          <Text>Date: {date}</Text>
+        </>
+      ) : (
+        <Text>Loading Earth image...</Text>
+      )}
+    </View>
+  );
+};
+
 
 function MarsScreen() {
   const [roverPhotos, setRoverPhotos] = useState(null);
@@ -167,34 +203,46 @@ function MarsScreen() {
 }
 
 function EpicScreen() {
-  const [epicImages, setEpicImages] = useState(null);
+  const [roverPhotos, setRoverPhotos] = useState(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const flatListRef = useRef(null);
 
   useEffect(() => {
     axios
-      .get(`https://api.nasa.gov/EPIC/api/natural/all?api_key=${API_KEY}`)
-      .then(response => setEpicImages(response.data))
+      .get(`https://api.nasa.gov/EPIC/archive/natural/2019/05/30/png/epic_1b_20190530011359.png?api_key=${API_KEY}`, {
+        responseType: 'arraybuffer',
+      })
+      .then(response => {
+        const base64Image = btoa(
+          new Uint8Array(response.data).reduce((data, byte) => data + String.fromCharCode(byte), '')
+        );
+        setRoverPhotos([{ id: 1, base64Image }]);
+      })
       .catch(error => console.log(error));
   }, []);
 
   return (
     <View style={{ flex: 1 }}>
-      {epicImages && epicImages.length > 0 ? (
-        <FlatList
-          data={epicImages}
-          keyExtractor={(item, index) => index.toString()}
-          renderItem={({ item }) => (
-            <View>
-              <Text>Date: {item.date}</Text>
-              <Text>Caption: {item.caption}</Text>
-              <Image
-                source={{ uri: `https://api.nasa.gov/EPIC/archive/natural/${item.image}.png?api_key=${API_KEY}` }}
-                style={{ width: 415, height: 400 }}
-              />
-            </View>
-          )}
-        />
+      {roverPhotos ? (
+        <View>
+          <FlatList
+            ref={flatListRef}
+            data={roverPhotos}
+            horizontal
+            pagingEnabled
+            keyExtractor={item => item.id.toString()}
+            renderItem={({ item }) => (
+              <View style={{ flex: 1 }}>
+                <Image source={{ uri: `data:image/png;base64,${item.base64Image}` }} style={{ width: 415, height: 400 }} />
+              </View>
+            )}
+            getItemLayout={(data, index) => ({ length: 415, offset: 415 * index, index })}
+            initialScrollIndex={currentIndex}
+            onScrollToIndexFailed={() => { }}
+          />
+        </View>
       ) : (
-        <Text>Loading EPIC images...</Text>
+        <Text>Ничего нет...</Text>
       )}
     </View>
   );
